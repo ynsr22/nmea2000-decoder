@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { Search } from 'lucide-react';
-import { debounce } from 'lodash';
+import Fuse from 'fuse.js';
 
 interface PGNItem {
   PGN: number;
@@ -36,29 +36,31 @@ const PGNListDropdown: React.FC = () => {
       });
   }, []);
 
-  const debouncedSearch = useMemo(
-    () => debounce((value: string) => setSearchTerm(value), 300),
-    []
-  );
+  const fuse = useMemo(() => {
+    return new Fuse(pgnList, {
+      keys: ['Name'],
+      threshold: 0.3,
+      ignoreLocation: true,
+    });
+  }, [pgnList]);
 
   const handleSearchChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
-    debouncedSearch(e.target.value);
-  }, [debouncedSearch]);
+    setSearchTerm(e.target.value);
+  }, []);
 
   const filteredPgnList = useMemo(() => {
-    const lowercasedTerm = searchTerm.toLowerCase();
-    return pgnList.filter(item =>
-      item.Name.toLowerCase().includes(lowercasedTerm)
-    );
-  }, [pgnList, searchTerm]);
+    if (!searchTerm) return pgnList;
+    return fuse.search(searchTerm).map(result => result.item);
+  }, [pgnList, searchTerm, fuse]);
 
   const highlightText = (text: string, highlight: string) => {
-    const regex = new RegExp(`(${highlight})`, 'gi');
+    if (!highlight.trim()) return text;
+    const regex = new RegExp(`(${highlight.replace(/[-/\\^$*+?.()|[\]{}]/g, '\\$&')})`, 'gi');
     const parts = text.split(regex);
     return (
       <>
         {parts.map((part, index) =>
-          part.toLowerCase() === highlight.toLowerCase() ? (
+          regex.test(part) ? (
             <span key={index} className="bg-yellow-300">
               {part}
             </span>
@@ -85,6 +87,7 @@ const PGNListDropdown: React.FC = () => {
         <input
           type="text"
           onChange={handleSearchChange}
+          value={searchTerm}
           className="w-full pl-10 pr-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500"
           placeholder="Search PGNs"
         />

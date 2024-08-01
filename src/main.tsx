@@ -3,6 +3,7 @@ import ReactDOM from 'react-dom/client'
 import NMEA2000Decoder from './App.tsx'
 import PGNListDropdown from './PGNListDropdown';
 import './App.css'
+import { Analytics } from "@vercel/analytics/react"
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
@@ -16,5 +17,6 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
         </div>
       </div>
     </div>
+    <Analytics />
   </React.StrictMode>,
 )

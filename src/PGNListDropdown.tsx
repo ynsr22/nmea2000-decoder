@@ -39,7 +39,7 @@ const PGNListDropdown: React.FC = () => {
   const fuse = useMemo(() => {
     return new Fuse(pgnList, {
       keys: ['Name'],
-      threshold: 0.3,
+      threshold: 0.2,
       ignoreLocation: true,
     });
   }, [pgnList]);
@@ -50,7 +50,18 @@ const PGNListDropdown: React.FC = () => {
 
   const filteredPgnList = useMemo(() => {
     if (!searchTerm) return pgnList;
-    return fuse.search(searchTerm).map(result => result.item);
+    
+    const isNumeric = /^\d+$/.test(searchTerm);
+    
+    if (isNumeric) {
+      // For numeric search, filter PGNs that start with the search term
+      return pgnList.filter(item => 
+        item.PGN.toString().startsWith(searchTerm)
+      );
+    } else {
+      // For text search, use Fuse.js on the Name field
+      return fuse.search(searchTerm).map(result => result.item);
+    }
   }, [pgnList, searchTerm, fuse]);
 
   const highlightText = (text: string, highlight: string) => {
@@ -68,6 +79,22 @@ const PGNListDropdown: React.FC = () => {
             part
           )
         )}
+      </>
+    );
+  };
+
+  const highlightNumber = (number: number, highlight: string) => {
+    const numberString = number.toString();
+    const index = numberString.indexOf(highlight);
+    if (index === -1) return numberString;
+    
+    return (
+      <>
+        {numberString.slice(0, index)}
+        <span className="bg-yellow-300">
+          {numberString.slice(index, index + highlight.length)}
+        </span>
+        {numberString.slice(index + highlight.length)}
       </>
     );
   };
@@ -99,7 +126,9 @@ const PGNListDropdown: React.FC = () => {
         <ul className="max-h-64 overflow-y-auto">
           {filteredPgnList.map(({ PGN, Name }) => (
             <li key={`${PGN}-${Name}`} className="py-2 border-b border-gray-200">
-              <span className="font-medium text-gray-700">{PGN}:</span>{' '}
+              <span className="font-medium text-gray-700">
+                {/^\d+$/.test(searchTerm) ? highlightNumber(PGN, searchTerm) : PGN}:
+              </span>{' '}
               {highlightText(Name, searchTerm)}
             </li>
           ))}

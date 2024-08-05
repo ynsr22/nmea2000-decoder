@@ -1,11 +1,18 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { Search } from 'lucide-react';
 import Fuse from 'fuse.js';
+import { debounce } from "lodash";
 
 interface PGNItem {
   PGN: number;
   Name: string;
 }
+
+const Spinner: React.FC = () => (
+  <div className="flex justify-center items-center">
+  <div className="mt-4 w-8 h-8 rounded-full bg-gray-200 animate-ping opacity-75" />
+</div>
+);
 
 const PGNListDropdown: React.FC = () => {
   const [pgnList, setPgnList] = useState<PGNItem[]>([]);
@@ -44,18 +51,22 @@ const PGNListDropdown: React.FC = () => {
     });
   }, [pgnList]);
 
-  const handleSearchChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
-    setSearchTerm(e.target.value);
-  }, []);
+  const debouncedSetSearchTerm = useCallback(debounce((value) => {
+    setSearchTerm(value);
+  }, 100), []);
+
+  const handleSearchChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    debouncedSetSearchTerm(e.target.value);
+  };
 
   const filteredPgnList = useMemo(() => {
     if (!searchTerm) return pgnList;
-    
+
     const isNumeric = /^\d+$/.test(searchTerm);
-    
+
     if (isNumeric) {
       // For numeric search, filter PGNs that start with the search term
-      return pgnList.filter(item => 
+      return pgnList.filter(item =>
         item.PGN.toString().startsWith(searchTerm)
       );
     } else {
@@ -87,7 +98,7 @@ const PGNListDropdown: React.FC = () => {
     const numberString = number.toString();
     const index = numberString.indexOf(highlight);
     if (index === -1) return numberString;
-    
+
     return (
       <>
         {numberString.slice(0, index)}
@@ -99,14 +110,6 @@ const PGNListDropdown: React.FC = () => {
     );
   };
 
-  if (isLoading) {
-    return <div className="text-center">Loading PGN data...</div>;
-  }
-
-  if (error) {
-    return <div className="text-center text-red-500">{error}</div>;
-  }
-
   return (
     <div className="bg-white rounded-lg shadow-xl p-8 w-full max-w-sm">
       <h2 className="text-2xl font-bold text-gray-800 mb-4">PGN List</h2>
@@ -114,7 +117,6 @@ const PGNListDropdown: React.FC = () => {
         <input
           type="text"
           onChange={handleSearchChange}
-          value={searchTerm}
           className="w-full pl-10 pr-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500"
           placeholder="Search PGNs"
         />
@@ -122,7 +124,11 @@ const PGNListDropdown: React.FC = () => {
           <Search className="h-5 w-5 text-gray-400" />
         </div>
       </div>
-      {filteredPgnList.length > 0 ? (
+      {isLoading ? (
+        <Spinner />
+      ) : error ? (
+        <div className="text-center text-red-500">{error}</div>
+      ) : filteredPgnList.length > 0 ? (
         <ul className="max-h-64 overflow-y-auto">
           {filteredPgnList.map(({ PGN, Name }) => (
             <li key={`${PGN}-${Name}`} className="py-2 border-b border-gray-200">

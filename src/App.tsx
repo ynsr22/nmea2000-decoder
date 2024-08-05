@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { AlertCircle, Info } from 'lucide-react';
 import { Alert, AlertDescription, AlertTitle } from './components/ui/alert';
-import { Tooltip } from 'react-tooltip'
+import { Tooltip } from 'react-tooltip';
 
 interface PGNField {
   name: string;
@@ -23,19 +23,22 @@ const PGN_DATA: Record<string, PGNInfo> = {
       { name: 'Heading', start: 1, length: 2, units: 'rad' },
       { name: 'Deviation', start: 3, length: 2, units: 'rad' },
       { name: 'Variation', start: 5, length: 2, units: 'rad' },
-      { name: 'Reference', start: 7, length: 1, units: '' }
-    ]
-  }
+      { name: 'Reference', start: 7, length: 1, units: '' },
+    ],
+  },
 };
 
 const hexToBinary = (hex: string): string => {
-  return hex.split('').map(char => {
-    const value = parseInt(char, 16);
-    if (isNaN(value)) {
-      throw new Error('Invalid character in hex string');
-    }
-    return value.toString(2).padStart(4, '0');
-  }).join('');
+  return hex
+    .split('')
+    .map((char) => {
+      const value = parseInt(char, 16);
+      if (isNaN(value)) {
+        throw new Error('Invalid character in hex string');
+      }
+      return value.toString(2).padStart(4, '0');
+    })
+    .join('');
 };
 
 const binaryToDecimal = (binary: string): number => {
@@ -88,15 +91,18 @@ const NMEA2000Decoder: React.FC = () => {
   const [decodedId, setDecodedId] = useState<DecodedCanMessage | null>(null);
   const [dataInput, setDataInput] = useState('00123456789ABCDE');
   const [decodedData, setDecodedData] = useState<Record<string, string>>({});
-  const [error, setError] = useState('');
+  const [idError, setIdError] = useState('');
+  const [dataError, setDataError] = useState('');
 
   useEffect(() => {
     try {
       const decoded = decodeCanMessage(idInput);
       setDecodedId(decoded);
-      setError('');
+      setIdError('');
     } catch (e) {
-      setError((e as Error).message);
+      setDecodedId(null);
+      setIdError((e as Error).message);
+      setDecodedData({});
     }
   }, [idInput]);
 
@@ -108,16 +114,18 @@ const NMEA2000Decoder: React.FC = () => {
 
   const decodeData = (data: string, pgn: number) => {
     if (data.length !== 16) {
-      setError('Data must be 8 bytes (16 hex characters)');
+      setDecodedData({});
+      setDataError('Data must be 8 bytes (16 hex characters)');
       return;
     }
     const pgnInfo = PGN_DATA[pgn];
     if (!pgnInfo) {
-      setError('Unknown PGN');
+      setDecodedData({});
+      setDataError('Unknown PGN');
       return;
     }
     const decodedFields: Record<string, string> = {};
-    pgnInfo.fields.forEach(field => {
+    pgnInfo.fields.forEach((field) => {
       const startByte = field.start * 2;
       const endByte = startByte + field.length * 2;
       let value = parseInt(data.slice(startByte, endByte), 16);
@@ -129,7 +137,7 @@ const NMEA2000Decoder: React.FC = () => {
       decodedFields[field.name] = value.toString();
     });
     setDecodedData(decodedFields);
-    setError('');
+    setDataError('');
   };
 
   const handleIdInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -152,7 +160,7 @@ const NMEA2000Decoder: React.FC = () => {
                 <Info className="ml-1 h-4 w-4 text-gray-400" />
               </a>
               <Tooltip id="my-tooltip" />
-              </label>
+            </label>
             <input
               id="idInput"
               type="text"
@@ -161,6 +169,13 @@ const NMEA2000Decoder: React.FC = () => {
               className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500"
               placeholder="Enter 8 hex characters"
             />
+            {idError && (
+              <Alert variant="destructive" className="mt-2">
+                <AlertCircle className="h-4 w-4" />
+                <AlertTitle>Error</AlertTitle>
+                <AlertDescription>{idError}</AlertDescription>
+              </Alert>
+            )}
           </div>
           {decodedId && (
             <div className="grid grid-cols-2 gap-4">
@@ -193,6 +208,13 @@ const NMEA2000Decoder: React.FC = () => {
               className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500"
               placeholder="Enter 16 hex characters"
             />
+            {dataError && (
+              <Alert variant="destructive" className="mt-2">
+                <AlertCircle className="h-4 w-4" />
+                <AlertTitle>Error</AlertTitle>
+                <AlertDescription>{dataError}</AlertDescription>
+              </Alert>
+            )}
           </div>
           {Object.keys(decodedData).length > 0 && (
             <div className="grid grid-cols-2 gap-4">
@@ -208,13 +230,6 @@ const NMEA2000Decoder: React.FC = () => {
                 </div>
               ))}
             </div>
-          )}
-          {error && (
-            <Alert variant="destructive">
-              <AlertCircle className="h-4 w-4" />
-              <AlertTitle>Error</AlertTitle>
-              <AlertDescription>{error}</AlertDescription>
-            </Alert>
           )}
         </div>
       </div>

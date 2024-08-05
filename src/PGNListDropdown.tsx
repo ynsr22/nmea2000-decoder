@@ -10,7 +10,7 @@ interface PGNItem {
 
 const Spinner: React.FC = () => (
   <div className="flex justify-center items-center">
-  <div className="mt-4 w-8 h-8 rounded-full bg-gray-200 animate-ping opacity-75" />
+  <div className="mt-4 w-8 h-8 rounded-full bg-gray-300 animate-ping opacity-75" />
 </div>
 );
 

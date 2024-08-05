@@ -111,7 +111,7 @@ const PGNListDropdown: React.FC = () => {
   };
 
   return (
-    <div className="bg-white rounded-lg shadow-xl p-8 w-full max-w-sm">
+    <div className="bg-white rounded-lg shadow-xl p-8 w-80 max-w-sm">
       <h2 className="text-2xl font-bold text-gray-800 mb-4">PGN List</h2>
       <div className="relative mb-4">
         <input

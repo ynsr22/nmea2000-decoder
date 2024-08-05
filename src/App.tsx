@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { AlertCircle, Info } from 'lucide-react';
-import { Alert, AlertDescription, AlertTitle } from './components/ui/alert';
+import { Alert, AlertTitle } from './components/ui/alert';
 import { Tooltip } from 'react-tooltip';
 
 interface PGNField {
@@ -87,9 +87,9 @@ const decodeCanMessage = (hexInput: string): DecodedCanMessage => {
 };
 
 const NMEA2000Decoder: React.FC = () => {
-  const [idInput, setIdInput] = useState('19F21451');
+  const [idInput, setIdInput] = useState('');
   const [decodedId, setDecodedId] = useState<DecodedCanMessage | null>(null);
-  const [dataInput, setDataInput] = useState('00123456789ABCDE');
+  const [dataInput, setDataInput] = useState('');
   const [decodedData, setDecodedData] = useState<Record<string, string>>({});
   const [idError, setIdError] = useState('');
   const [dataError, setDataError] = useState('');
@@ -100,7 +100,7 @@ const NMEA2000Decoder: React.FC = () => {
       setDecodedId(decoded);
       setIdError('');
     } catch (e) {
-      setDecodedId(null);
+      setDecodedId({ priority: 0, pgn: 0, srcAddress: 0, destAddress: 0, pduFormat: '' });
       setIdError((e as Error).message);
       setDecodedData({});
     }
@@ -170,10 +170,9 @@ const NMEA2000Decoder: React.FC = () => {
               placeholder="Enter 8 hex characters"
             />
             {idError && (
-              <Alert variant="destructive" className="mt-2">
+              <Alert variant="default" className="mt-2">
                 <AlertCircle className="h-4 w-4" />
-                <AlertTitle>Error</AlertTitle>
-                <AlertDescription>{idError}</AlertDescription>
+                <AlertTitle>{idError}</AlertTitle>
               </Alert>
             )}
           </div>
@@ -209,10 +208,9 @@ const NMEA2000Decoder: React.FC = () => {
               placeholder="Enter 16 hex characters"
             />
             {dataError && (
-              <Alert variant="destructive" className="mt-2">
+              <Alert variant="default" className="mt-2">
                 <AlertCircle className="h-4 w-4" />
-                <AlertTitle>Error</AlertTitle>
-                <AlertDescription>{dataError}</AlertDescription>
+                <AlertTitle>{dataError}</AlertTitle>
               </Alert>
             )}
           </div>

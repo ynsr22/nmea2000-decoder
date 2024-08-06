@@ -1,8 +1,8 @@
 import React from 'react'
 import ReactDOM from 'react-dom/client'
-import NMEA2000Decoder from './App.tsx'
+import NMEA2000Decoder from './NMEA2000decoder'
 import PGNListDropdown from './PGNListDropdown';
-import './App.css'
+import './main.css'
 import { Analytics } from "@vercel/analytics/react"
 
 ReactDOM.createRoot(document.getElementById('root')!).render(

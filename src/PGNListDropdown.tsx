@@ -1,112 +1,71 @@
+// Import necessary React hooks and other dependencies
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { Search } from 'lucide-react';
 import Fuse from 'fuse.js';
-import { debounce } from "lodash";
+import { debounce } from 'lodash';
 
-interface PGNItem {
-  PGN: number;
-  Name: string;
-}
+// Define the type for the PGN item
+type PGNItem = { PGN: number; Name: string };
 
-const Spinner: React.FC = () => (
-  <div className="flex justify-center items-center">
-  <div className="mt-4 w-8 h-8 rounded-full bg-gray-300 animate-ping opacity-75" />
-</div>
-);
-
+// Define the PGNListDropdown component
 const PGNListDropdown: React.FC = () => {
+  // Initialize state variables
   const [pgnList, setPgnList] = useState<PGNItem[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
-  const [isLoading, setIsLoading] = useState(true);
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  // useEffect hook to fetch data and handle caching
   useEffect(() => {
-    fetch('/pgn_name.json')
-      .then(response => {
-        if (!response.ok) {
-          throw new Error(`HTTP error! status: ${response.status}`);
-        }
-        return response.json();
-      })
-      .then(data => {
-        if (Array.isArray(data) && data.every(item => 'PGN' in item && 'Name' in item)) {
-          setPgnList(data);
-        } else {
-          throw new Error('Invalid data structure');
-        }
-        setIsLoading(false);
-      })
-      .catch(err => {
-        console.error('Error fetching PGN data:', err);
-        setError(`Failed to load PGN data. Error: ${err.message}`);
-        setIsLoading(false);
-      });
+    const cachedData = localStorage.getItem('pgnListCache');
+    if (cachedData) {
+      setPgnList(JSON.parse(cachedData));
+      setLoading(false);
+    } else {
+      fetch('/pgn_name.json')
+        .then(response => response.json())
+        .then(data => {
+          // Validate data structure
+          if (Array.isArray(data) && data.every(item => 'PGN' in item && 'Name' in item)) {
+            setPgnList(data);
+            localStorage.setItem('pgnListCache', JSON.stringify(data));
+          } else {
+            throw new Error('Invalid data structure');
+          }
+          setLoading(false);
+        })
+        .catch(err => {
+          setError(`Failed to load PGN data. Error: ${err.message}`);
+          setLoading(false);
+        });
+    }
   }, []);
 
-  const fuse = useMemo(() => {
-    return new Fuse(pgnList, {
-      keys: ['Name'],
-      threshold: 0.2,
-      ignoreLocation: true,
-    });
-  }, [pgnList]);
+  // useMemo hook to initialize Fuse.js for fuzzy searching
+  const fuse = useMemo(() => new Fuse(pgnList, {
+    keys: ['Name'],
+    threshold: 0.2,
+    ignoreLocation: true,
+  }), [pgnList]);
 
-  const debouncedSetSearchTerm = useCallback(debounce((value) => {
-    setSearchTerm(value);
-  }, 100), []);
+  // useCallback hook to handle search input change with debouncing
+  const handleSearchChange = useCallback(debounce((e: React.ChangeEvent<HTMLInputElement>) => 
+    setSearchTerm(e.target.value), 300), []);
 
-  const handleSearchChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    debouncedSetSearchTerm(e.target.value);
-  };
-
+  // useMemo hook to filter the PGN list based on the search term
   const filteredPgnList = useMemo(() => {
     if (!searchTerm) return pgnList;
-
-    const isNumeric = /^\d+$/.test(searchTerm);
-
-    if (isNumeric) {
-      // For numeric search, filter PGNs that start with the search term
-      return pgnList.filter(item =>
-        item.PGN.toString().startsWith(searchTerm)
-      );
-    } else {
-      // For text search, use Fuse.js on the Name field
-      return fuse.search(searchTerm).map(result => result.item);
-    }
+    return /^\d+$/.test(searchTerm)
+      ? pgnList.filter(item => item.PGN.toString().startsWith(searchTerm))
+      : fuse.search(searchTerm).map(result => result.item);
   }, [pgnList, searchTerm, fuse]);
 
+  // Function to highlight the search term in the text
   const highlightText = (text: string, highlight: string) => {
     if (!highlight.trim()) return text;
-    const regex = new RegExp(`(${highlight.replace(/[-/\\^$*+?.()|[\]{}]/g, '\\$&')})`, 'gi');
-    const parts = text.split(regex);
-    return (
-      <>
-        {parts.map((part, index) =>
-          regex.test(part) ? (
-            <span key={index} className="bg-yellow-300">
-              {part}
-            </span>
-          ) : (
-            part
-          )
-        )}
-      </>
-    );
-  };
-
-  const highlightNumber = (number: number, highlight: string) => {
-    const numberString = number.toString();
-    const index = numberString.indexOf(highlight);
-    if (index === -1) return numberString;
-
-    return (
-      <>
-        {numberString.slice(0, index)}
-        <span className="bg-yellow-300">
-          {numberString.slice(index, index + highlight.length)}
-        </span>
-        {numberString.slice(index + highlight.length)}
-      </>
+    const regex = new RegExp(`(${highlight})`, 'gi');
+    return text.split(regex).map((part, i) => 
+      regex.test(part) ? <mark key={i}>{part}</mark> : <span key={i}>{part}</span>
     );
   };
 
@@ -120,30 +79,34 @@ const PGNListDropdown: React.FC = () => {
           className="w-full pl-10 pr-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500"
           placeholder="Search PGNs"
         />
-        <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-          <Search className="h-5 w-5 text-gray-400" />
-        </div>
+        <Search className="absolute top-2.5 left-3 h-5 w-5 text-gray-400" />
       </div>
-      {isLoading ? (
-        <Spinner />
-      ) : error ? (
-        <div className="text-center text-red-500">{error}</div>
-      ) : filteredPgnList.length > 0 ? (
-        <ul className="max-h-64 overflow-y-auto">
-          {filteredPgnList.map(({ PGN, Name }) => (
-            <li key={`${PGN}-${Name}`} className="py-2 border-b border-gray-200">
-              <span className="font-medium text-gray-700">
-                {/^\d+$/.test(searchTerm) ? highlightNumber(PGN, searchTerm) : PGN}:
-              </span>{' '}
-              {highlightText(Name, searchTerm)}
-            </li>
+      {loading ? (
+        // Display a skeleton loader while data is loading
+        <div className="animate-pulse space-y-2">
+          {[...Array(5)].map((_, i) => (
+            <div key={i} className="h-8 bg-gray-200 rounded"></div>
           ))}
-        </ul>
+        </div>
+      ) : error ? (
+        // Display an error message if data fetching fails
+        <div className="text-center text-red-500">{error}</div>
+      ) : filteredPgnList.length ? (
+        // Display the filtered PGN list
+        <div className="max-h-96 overflow-y-auto">
+          {filteredPgnList.map(({ PGN, Name }, index) => (
+            <div key={index} className="py-2 border-b border-gray-200">
+              <span className="font-medium text-gray-700">{highlightText(PGN.toString(), searchTerm)}:</span> {highlightText(Name, searchTerm)}
+            </div>
+          ))}
+        </div>
       ) : (
+        // Display a message if no results are found
         <div className="text-center text-gray-500">No results found</div>
       )}
     </div>
   );
 };
 
+// Export the component as the default export
 export default PGNListDropdown;

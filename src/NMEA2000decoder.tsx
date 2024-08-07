@@ -1,19 +1,19 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useCallback, useMemo } from 'react';
 import { AlertCircle, Info } from 'lucide-react';
 import { Alert, AlertTitle } from './components/ui/alert';
 import { Tooltip } from 'react-tooltip';
 
-interface PGNField {
+type PGNField = {
   name: string;
   start: number;
   length: number;
   units: string;
-}
+};
 
-interface PGNInfo {
+type PGNInfo = {
   name: string;
   fields: PGNField[];
-}
+};
 
 const PGN_DATA: Record<string, PGNInfo> = {
   '127508': {
@@ -28,207 +28,201 @@ const PGN_DATA: Record<string, PGNInfo> = {
   },
 };
 
-const hexToBinary = (hex: string): string => {
-  return hex
-    .split('')
-    .map((char) => {
-      const value = parseInt(char, 16);
-      if (isNaN(value)) {
-        throw new Error('Invalid character in hex string');
-      }
-      return value.toString(2).padStart(4, '0');
-    })
-    .join('');
-};
-
-const binaryToDecimal = (binary: string): number => {
-  return parseInt(binary, 2);
-};
-
-interface DecodedCanMessage {
+interface DecodedCAN {
   priority: number;
   pgn: number;
   srcAddress: number;
   destAddress: number;
-  pduFormat: string;
+  pduFormat: 'PDU1' | 'PDU2';
 }
 
-const decodeCanMessage = (hexInput: string): DecodedCanMessage => {
-  if (hexInput.length !== 8) {
-    throw new Error('Input hex string must be exactly 8 characters long.');
-  }
-
-  const binary = hexToBinary(hexInput).substring(3);
-
-  if (binary.length !== 29) {
-    throw new Error('Converted binary string must be 29 bits long.');
-  }
-
-  const priority = binaryToDecimal(binary.substring(0, 3));
-  const pdu = binaryToDecimal(binary.substring(5, 13));
-  const pds = binary.substring(13, 21);
-  const srcAddress = binaryToDecimal(binary.substring(21, 29));
-
-  let pduFormat: string;
-  let pgn: number;
-  let destAddress: number;
-
-  if (pdu >= 240) {
-    pduFormat = 'PDU2';
-    pgn = binaryToDecimal(binary.substring(3, 21));
-    destAddress = 255;
-  } else {
-    pduFormat = 'PDU1';
-    pgn = binaryToDecimal(binary.substring(3, 13) + '00000000');
-    destAddress = binaryToDecimal(pds);
-  }
-
+const decodeCanMessage = (hexInput: string): DecodedCAN => {
+  if (hexInput.length !== 8) throw new Error('Input hex string must be exactly 8 characters long.');
+  const num = parseInt(hexInput, 16);
+  const priority = (num >> 26) & 0x7;
+  const pdu = (num >> 16) & 0xFF;
+  const srcAddress = num & 0xFF;
+  const pduFormat = pdu >= 240 ? 'PDU2' : 'PDU1';
+  const pgn = pdu >= 240 ? ((num >> 8) & 0x3FFFF) : ((num >> 16) & 0xFF00);
+  const destAddress = pdu >= 240 ? 255 : (num >> 8) & 0xFF;
   return { priority, pgn, srcAddress, destAddress, pduFormat };
 };
 
-const NMEA2000Decoder: React.FC = () => {
+const useCanDecoder = () => {
   const [idInput, setIdInput] = useState('');
-  const [decodedId, setDecodedId] = useState<DecodedCanMessage | null>(null);
   const [dataInput, setDataInput] = useState('');
+  const [decodedId, setDecodedId] = useState<DecodedCAN | null>(null);
   const [decodedData, setDecodedData] = useState<Record<string, string>>({});
   const [idError, setIdError] = useState('');
   const [dataError, setDataError] = useState('');
 
-  useEffect(() => {
+  const decodeId = useCallback((input: string): DecodedCAN | null => {
     try {
-      const decoded = decodeCanMessage(idInput);
+      const decoded = decodeCanMessage(input);
       setDecodedId(decoded);
       setIdError('');
+      return decoded;
     } catch (e) {
-      setDecodedId({ priority: 0, pgn: 0, srcAddress: 0, destAddress: 0, pduFormat: '' });
+      setDecodedId(null);
       setIdError((e as Error).message);
       setDecodedData({});
+      return null;
     }
-  }, [idInput]);
+  }, []);
 
-  useEffect(() => {
-    if (decodedId && decodedId.pgn) {
-      decodeData(dataInput, decodedId.pgn);
-    }
-  }, [decodedId, dataInput]);
-
-  const decodeData = (data: string, pgn: number) => {
+  const decodeData = useCallback((data: string, pgn: number) => {
     if (data.length !== 16) {
       setDecodedData({});
       setDataError('Data must be 8 bytes (16 hex characters)');
       return;
     }
-    const pgnInfo = PGN_DATA[pgn];
+    const pgnInfo = PGN_DATA[pgn.toString()];
     if (!pgnInfo) {
       setDecodedData({});
       setDataError('Unknown PGN');
       return;
     }
-    const decodedFields: Record<string, string> = {};
-    pgnInfo.fields.forEach((field) => {
+    const decodedFields = pgnInfo.fields.reduce<Record<string, string>>((acc, field) => {
       const startByte = field.start * 2;
       const endByte = startByte + field.length * 2;
       let value = parseInt(data.slice(startByte, endByte), 16);
-
-      if (field.units === 'rad') {
-        value = parseFloat((value * 0.0001).toFixed(4));
-      }
-
-      decodedFields[field.name] = value.toString();
-    });
+      if (field.units === 'rad') value = parseFloat((value * 0.0001).toFixed(4));
+      acc[field.name] = value.toString();
+      return acc;
+    }, {});
     setDecodedData(decodedFields);
     setDataError('');
-  };
+  }, []);
 
-  const handleIdInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setIdInput(e.target.value);
-  };
+  const handleIdInputChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    const input = e.target.value;
+    setIdInput(input);
+    const decoded = decodeId(input);
+    if (decoded?.pgn) decodeData(dataInput, decoded.pgn);
+  }, [dataInput, decodeId, decodeData]);
 
-  const handleDataInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setDataInput(e.target.value);
+  const handleDataInputChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    const input = e.target.value;
+    setDataInput(input);
+    if (decodedId?.pgn) decodeData(input, decodedId.pgn);
+  }, [decodedId, decodeData]);
+
+  return {
+    idInput,
+    dataInput,
+    decodedId,
+    decodedData,
+    idError,
+    dataError,
+    handleIdInputChange,
+    handleDataInputChange
   };
+};
+
+interface InputFieldProps {
+  id: string;
+  label: string;
+  value: string;
+  onChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
+  placeholder: string;
+  tooltipContent: string;
+  error?: string;
+}
+
+const InputField: React.FC<InputFieldProps> = React.memo(({ 
+  id, label, value, onChange, placeholder, tooltipContent, error 
+}) => (
+  <div>
+    <label htmlFor={id} className="flex text-sm font-medium text-gray-700 mb-1 items-center">
+      {label}
+      <a data-tooltip-id={`tooltip-${id}`} data-tooltip-content={tooltipContent} data-tooltip-place="right">
+        <Info className="ml-1 h-4 w-4 text-gray-400" />
+      </a>
+      <Tooltip id={`tooltip-${id}`} />
+    </label>
+    <input
+      id={id}
+      type="text"
+      value={value}
+      onChange={onChange}
+      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500"
+      placeholder={placeholder}
+    />
+    {error && (
+      <Alert variant="default" className="mt-2">
+        <AlertCircle className="h-4 w-4" />
+        <AlertTitle>{error}</AlertTitle>
+      </Alert>
+    )}
+  </div>
+));
+
+InputField.displayName = 'InputField';
+
+interface DecodedFieldsProps {
+  fields: Record<string, string>;
+}
+
+const DecodedFields: React.FC<DecodedFieldsProps> = React.memo(({ fields }) => (
+  <div className="grid grid-cols-2 gap-4">
+    {Object.entries(fields).map(([key, value]) => (
+      <div key={key}>
+        <label className="block text-sm font-medium text-gray-700 mb-1">{key}</label>
+        <input
+          type="text"
+          value={value}
+          readOnly
+          className="w-full px-3 py-2 bg-gray-100 border border-gray-300 rounded-md cursor-not-allowed"
+        />
+      </div>
+    ))}
+  </div>
+));
+
+DecodedFields.displayName = 'DecodedFields';
+
+const NMEA2000Decoder: React.FC = () => {
+  const {
+    idInput,
+    dataInput,
+    decodedId,
+    decodedData,
+    idError,
+    dataError,
+    handleIdInputChange,
+    handleDataInputChange
+  } = useCanDecoder();
+
+  const memoizedDecodedIdFields = useMemo(() => 
+    decodedId ? Object.fromEntries(Object.entries(decodedId).map(([k, v]) => [k, v.toString()])) : null,
+    [decodedId]
+  );
 
   return (
     <div className="min-h-screen flex justify-center">
       <div className="bg-white rounded-lg shadow-xl p-8 w-full max-w-2xl">
         <h1 className="text-2xl font-bold text-gray-800 mb-6 text-center">NMEA 2000 Protocol Decoder</h1>
         <div className="space-y-6">
-          <div>
-            <label htmlFor="idInput" className="flex text-sm font-medium text-gray-700 mb-1 items-center">
-              Message ID (4 bytes)
-              <a data-tooltip-id="my-tooltip" data-tooltip-content="ID Input HERE" data-tooltip-place="right">
-                <Info className="ml-1 h-4 w-4 text-gray-400" />
-              </a>
-              <Tooltip id="my-tooltip" />
-            </label>
-            <input
-              id="idInput"
-              type="text"
-              value={idInput}
-              onChange={handleIdInputChange}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500"
-              placeholder="Enter 8 hex characters"
-            />
-            {idError && (
-              <Alert variant="default" className="mt-2">
-                <AlertCircle className="h-4 w-4" />
-                <AlertTitle>{idError}</AlertTitle>
-              </Alert>
-            )}
-          </div>
-          {decodedId && (
-            <div className="grid grid-cols-2 gap-4">
-              {Object.entries(decodedId).map(([key, value]) => (
-                <div key={key}>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">{key}</label>
-                  <input
-                    type="text"
-                    value={value.toString()}
-                    readOnly
-                    className="w-full px-3 py-2 bg-gray-100 border border-gray-300 rounded-md cursor-not-allowed"
-                  />
-                </div>
-              ))}
-            </div>
-          )}
-          <div>
-            <label htmlFor="dataInput" className="flex text-sm font-medium text-gray-700 mb-1 items-center">
-              Data (8 bytes)
-              <a data-tooltip-id="my-tooltip2" data-tooltip-content="Enter 16 hex characters representing the Data" data-tooltip-place="right">
-                <Info className="ml-1 h-4 w-4 text-gray-400" />
-              </a>
-              <Tooltip id="my-tooltip2" />
-            </label>
-            <input
-              id="dataInput"
-              type="text"
-              value={dataInput}
-              onChange={handleDataInputChange}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500"
-              placeholder="Enter 16 hex characters"
-            />
-            {dataError && (
-              <Alert variant="default" className="mt-2">
-                <AlertCircle className="h-4 w-4" />
-                <AlertTitle>{dataError}</AlertTitle>
-              </Alert>
-            )}
-          </div>
-          {Object.keys(decodedData).length > 0 && (
-            <div className="grid grid-cols-2 gap-4">
-              {Object.entries(decodedData).map(([key, value]) => (
-                <div key={key}>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">{key}</label>
-                  <input
-                    type="text"
-                    value={value}
-                    readOnly
-                    className="w-full px-3 py-2 bg-gray-100 border border-gray-300 rounded-md"
-                  />
-                </div>
-              ))}
-            </div>
-          )}
+          <InputField
+            id="idInput"
+            label="Message ID (4 bytes)"
+            value={idInput}
+            onChange={handleIdInputChange}
+            placeholder="Enter 8 hex characters"
+            tooltipContent="Enter the 8-character hexadecimal CAN identifier"
+            error={idError}
+          />
+          {memoizedDecodedIdFields && <DecodedFields fields={memoizedDecodedIdFields} />}
+          <InputField
+            id="dataInput"
+            label="Data (8 bytes)"
+            value={dataInput}
+            onChange={handleDataInputChange}
+            placeholder="Enter 16 hex characters"
+            tooltipContent="Enter the 16-character hexadecimal data payload"
+            error={dataError}
+          />
+          {Object.keys(decodedData).length > 0 && <DecodedFields fields={decodedData} />}
         </div>
       </div>
     </div>

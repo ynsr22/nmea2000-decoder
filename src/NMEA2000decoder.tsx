@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useMemo } from 'react';
+import React, { useState, useCallback } from 'react';
 import { AlertCircle, Info } from 'lucide-react';
 import { Alert, AlertTitle } from './components/ui/alert';
 import { Tooltip } from 'react-tooltip';
@@ -35,6 +35,15 @@ interface DecodedCAN {
   destAddress: number;
   pduFormat: 'PDU1' | 'PDU2';
 }
+
+// New mapping for display names
+const FIELD_DISPLAY_NAMES: Record<keyof DecodedCAN, string> = {
+  priority: 'Priority',
+  pgn: 'PGN',
+  srcAddress: 'Src Address',
+  destAddress: 'Dst Address',
+  pduFormat: 'PDU Format'
+};
 
 const decodeCanMessage = (hexInput: string): DecodedCAN => {
   if (hexInput.length !== 8) throw new Error('Input hex string must be exactly 8 characters long.');
@@ -159,12 +168,37 @@ const InputField: React.FC<InputFieldProps> = React.memo(({
 
 InputField.displayName = 'InputField';
 
+
 interface DecodedFieldsProps {
   fields: Record<string, string>;
 }
 
+interface DecodedCANDisplayProps {
+  decodedCAN: DecodedCAN;
+}
+
+const DecodedCANDisplay: React.FC<DecodedCANDisplayProps> = React.memo(({ decodedCAN }) => (
+  <div className="grid grid-cols-5 gap-2 rounded-md">
+    {(Object.keys(decodedCAN) as Array<keyof DecodedCAN>).map((key) => (
+      <div key={key}>
+        <label className="block text-xs font-medium text-center text-gray-500 mb-1">
+          {FIELD_DISPLAY_NAMES[key]}
+        </label>
+        <input
+          type="text"
+          value={decodedCAN[key].toString()}
+          readOnly
+          className="w-full px-2 py-1 text-sm bg-gray-100 text-center border border-gray-300 rounded-md cursor-not-allowed"
+        />
+      </div>
+    ))}
+  </div>
+));
+
+DecodedCANDisplay.displayName = 'DecodedCANDisplay';
+
 const DecodedFields: React.FC<DecodedFieldsProps> = React.memo(({ fields }) => (
-  <div className="grid grid-cols-2 gap-4">
+  <div className="grid grid-cols-2 gap-4 mt-4">
     {Object.entries(fields).map(([key, value]) => (
       <div key={key}>
         <label className="block text-sm font-medium text-gray-700 mb-1">{key}</label>
@@ -193,11 +227,6 @@ const NMEA2000Decoder: React.FC = () => {
     handleDataInputChange
   } = useCanDecoder();
 
-  const memoizedDecodedIdFields = useMemo(() => 
-    decodedId ? Object.fromEntries(Object.entries(decodedId).map(([k, v]) => [k, v.toString()])) : null,
-    [decodedId]
-  );
-
   return (
     <div className="min-h-screen flex justify-center">
       <div className="bg-white rounded-lg shadow-xl p-8 w-full max-w-2xl">
@@ -212,7 +241,7 @@ const NMEA2000Decoder: React.FC = () => {
             tooltipContent="Enter the 8-character hexadecimal CAN identifier"
             error={idError}
           />
-          {memoizedDecodedIdFields && <DecodedFields fields={memoizedDecodedIdFields} />}
+          {decodedId && <DecodedCANDisplay decodedCAN={decodedId} />}
           <InputField
             id="dataInput"
             label="Data (8 bytes)"

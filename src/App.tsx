@@ -7,7 +7,7 @@ import { Analytics } from '@vercel/analytics/react';
 const App = () => (
   <React.StrictMode>
     <div className="min-h-screen bg-gradient-to-br from-blue-200 to-green-100 flex items-center justify-center p-4">
-      <div className="flex flex-col md:flex-row md:space-x-8 max-w-6xl">
+      <div className="flex flex-col md:flex-row md:space-x-8 w-full max-w-6xl">
         <div className="flex-grow md:w-2/3">
           <NMEA2000Decoder />
         </div>
